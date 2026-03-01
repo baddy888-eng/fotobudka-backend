@@ -5,7 +5,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // STAŁE KONFIGURACYJNE – UZUPEŁNIJ SWOIMI DANYMI!
-const PROJECT_ID = 'Fotobudka AI';  // Wpisz tutaj ID projektu (np. 'fotobudka-ai-123456')
+const PROJECT_ID = 'fotobudka-ai';  // Wpisz tutaj ID projektu (np. 'fotobudka-ai-123456')
 const LOCATION = 'us-central1';                // Region – może być 'us-central1' lub 'global'
 const MODEL = 'gemini-2.5-flash-image-preview'; // Model do edycji obrazów
 
@@ -111,3 +111,4 @@ app.listen(PORT, () => {
     console.log(`📁 Projekt: ${PROJECT_ID}`);
     console.log(`🌍 Lokalizacja: ${LOCATION}`);
 });
+
