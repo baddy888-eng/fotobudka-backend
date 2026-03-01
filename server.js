@@ -7,7 +7,7 @@ const PORT = process.env.PORT || 3000;
 // STAŁE KONFIGURACYJNE – UZUPEŁNIJ SWOIMI DANYMI!
 const PROJECT_ID = 'fotobudka-ai';  // Twoja nazwa projektu
 const LOCATION = 'us-central1';      // Region
-const MODEL = 'gemini-2.5-flash-image-preview';
+const MODEL = 'gemini-2.5-flash-image';
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -142,3 +142,4 @@ app.listen(PORT, () => {
     console.log(`🌍 Lokalizacja: ${LOCATION}`);
     console.log(`🔑 Autoryzacja: przez zmienną środowiskową GOOGLE_CREDENTIALS`);
 });
+
