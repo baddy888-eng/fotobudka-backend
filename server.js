@@ -70,26 +70,38 @@ app.post('/edit-photo', async (req, res) => {
         const data = await response.json();
         console.log('📩 Otrzymano odpowiedź z Vertex AI');
 
+        // 🔍🔍🔍 DODATKOWE LOGOWANIE CAŁEJ ODPOWIEDZI 🔍🔍🔍
+        console.log('📋 Pełna odpowiedź (pierwsze 500 znaków):', JSON.stringify(data).substring(0, 500));
+
         let editedImageBase64 = null;
 
         if (data.candidates && data.candidates[0]?.content?.parts) {
             console.log('📦 Znaleziono parts:', data.candidates[0].content.parts.length);
             
-            // ⚡⚡⚡ POPRAWA: PRZESZUKUJEMY WSZYSTKIE CZĘŚCI ⚡⚡⚡
             for (const part of data.candidates[0].content.parts) {
                 console.log('🔍 Part keys:', Object.keys(part));
                 
                 if (part.inline_data?.data) {
+                    console.log('✅ Znaleziono OBRAZ!');
+                    console.log('📊 Długość danych obrazu:', part.inline_data.data.length);
                     editedImageBase64 = part.inline_data.data;
-                    console.log('✅ Znaleziono obraz w odpowiedzi!');
-                    break;  // PRZERYWAMY PO ZNALEZIENIU OBRAZU
+                    console.log('✅ Zapisałem obraz do zmiennej');
+                    break;
                 }
                 
                 if (part.text) {
-                    console.log('📝 Model zwrócił tekst:', part.text.substring(0, 200));
-                    // KONTYNUUJEMY SZUKANIE – NIE PRZERYWAMY!
+                    console.log('📝 Model zwrócił tekst:', part.text.substring(0, 100));
                 }
             }
+        } else {
+            console.log('❌ Brak candidates lub parts w odpowiedzi');
+        }
+
+        // Sprawdź czy zmienna editedImageBase64 ma dane
+        if (editedImageBase64) {
+            console.log('✅ editedImageBase64 ma dane, długość:', editedImageBase64.length);
+        } else {
+            console.log('❌ editedImageBase64 jest pusta');
         }
 
         if (!editedImageBase64) {
