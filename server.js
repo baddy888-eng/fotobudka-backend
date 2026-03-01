@@ -7,7 +7,7 @@ const PORT = process.env.PORT || 3000;
 
 const PROJECT_ID = 'fotobudka-ai';
 const LOCATION = 'us-central1';
-const MODEL = 'imagen-3.0-capability-001';
+const MODEL = 'imagen-3.0-edit-001';
 
 app.use(cors());
 app.use(express.json({ limit: '20mb' }));
@@ -139,3 +139,4 @@ app.listen(PORT, () => {
     console.log(`✅ Serwer fotobudki działa na porcie ${PORT}`);
     console.log(`📸 Model: ${MODEL} (Imagen 3.0 capability - edycja)`);
 });
+
