@@ -7,12 +7,13 @@ const PORT = process.env.PORT || 3000;
 
 const PROJECT_ID = 'fotobudka-ai';
 const LOCATION = 'us-central1';
-const MODEL = 'imagegeneration@006';
+// 👇 ZMIANA 1: Poprawny model do edycji obrazów
+const MODEL = 'imagen-3.0-capability-001';
 
 app.use(cors());
 app.use(express.json({ limit: '20mb' }));
 
-// 🔐 Autoryzacja
+// 🔐 Autoryzacja (bez zmian - działa dobrze!)
 async function getAccessToken() {
     try {
         const credentialsJson = process.env.GOOGLE_CREDENTIALS;
@@ -50,21 +51,30 @@ app.post('/edit-photo', async (req, res) => {
 
         const vertexUrl = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${MODEL}:predict`;
 
+        // 👇 ZMIANA 2: Poprawna struktura dla Imagen 3.0 capability (edycja)
         const requestBody = {
             instances: [
                 {
                     prompt: prompt,
-                    image: {
-                        bytesBase64Encoded: imageBase64
-                    }
+                    referenceImages: [
+                        {
+                            referenceType: "REFERENCE_TYPE_RAW",
+                            referenceId: 1,
+                            referenceImage: {
+                                bytesBase64Encoded: imageBase64
+                            }
+                        }
+                    ]
                 }
             ],
             parameters: {
                 sampleCount: 1
+                // Opcjonalnie możesz dodać:
+                // "language": "pl"
             }
         };
 
-        console.log('🚀 Wysyłam do Imagen');
+        console.log('🚀 Wysyłam do Imagen (edycja)');
 
         const response = await fetch(vertexUrl, {
             method: 'POST',
@@ -78,7 +88,7 @@ app.post('/edit-photo', async (req, res) => {
         const data = await response.json();
 
         if (!response.ok) {
-            console.error('❌ Błąd API:', data);
+            console.error('❌ Błąd API:', JSON.stringify(data, null, 2));
             throw new Error(data.error?.message || 'Błąd wywołania Imagen API');
         }
 
@@ -86,16 +96,25 @@ app.post('/edit-photo', async (req, res) => {
 
         let editedImageBase64 = null;
 
+        // 👇 ZMIANA 3: Inna struktura odpowiedzi dla Imagen capability
         if (data.predictions && data.predictions.length > 0) {
-            editedImageBase64 = data.predictions[0].bytesBase64Encoded;
+            // Dla imagen-3.0-capability-001 odpowiedź może być w innym polu
+            // Sprawdzamy różne możliwe lokalizacje obrazu
+            const pred = data.predictions[0];
+            
+            if (pred.bytesBase64Encoded) {
+                editedImageBase64 = pred.bytesBase64Encoded;
+            } else if (pred.image?.bytesBase64Encoded) {
+                editedImageBase64 = pred.image.bytesBase64Encoded;
+            }
         }
 
         if (!editedImageBase64) {
+            console.error('❌ Nie znaleziono obrazu. Odpowiedź:', JSON.stringify(data, null, 2));
             throw new Error('Nie otrzymano obrazu z Imagen');
         }
 
         console.log('✅ Odsyłam obraz do frontendu');
-
         res.json({ image: editedImageBase64 });
 
     } catch (error) {
@@ -111,4 +130,5 @@ app.get('/health', (req, res) => {
 
 app.listen(PORT, () => {
     console.log(`✅ Serwer fotobudki działa na porcie ${PORT}`);
+    console.log(`📸 Model: ${MODEL} (Imagen 3.0 capability - edycja)`);
 });
