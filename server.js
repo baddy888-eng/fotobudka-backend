@@ -1,86 +1,86 @@
 const express = require('express');
 const { GoogleAuth } = require('google-auth-library');
 const cors = require('cors');
-const fetch = require('node-fetch'); // Upewnij się, że masz zainstalowane node-fetch, jeśli używasz starszego Node.js
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Konfiguracja Google Cloud
 const PROJECT_ID = 'fotobudka-ai';
 const LOCATION = 'us-central1';
-// ✅ Model wspierający edycję (inpainting/outpainting)
-const MODEL = 'imagen-3';
+const MODEL = 'imagen-3.0-capability-001';
 
+// Middleware
 app.use(cors());
-// Zwiększony limit, aby obsłużyć duże zdjęcia w Base64
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '50mb' })); // Zwiększony limit dla dużych zdjęć Base64
 
-/**
- * 🔐 Pobieranie tokenu dostępu do Google Cloud
- */
+// 1. Funkcja do autoryzacji Google Cloud
 async function getAccessToken() {
     try {
         const credentialsJson = process.env.GOOGLE_CREDENTIALS;
-        if (!credentialsJson) throw new Error('Brak zmiennej środowiskowej GOOGLE_CREDENTIALS');
-
-        const credentials = JSON.parse(credentialsJson);
+        if (!credentialsJson) {
+            throw new Error('Brak zmiennej środowiskowej GOOGLE_CREDENTIALS. Upewnij się, że plik .env ją zawiera.');
+        }
 
         const auth = new GoogleAuth({
-            credentials: credentials,
+            credentials: JSON.parse(credentialsJson),
             scopes: ['https://www.googleapis.com/auth/cloud-platform']
         });
 
         const client = await auth.getClient();
         const token = await client.getAccessToken();
-
         return token.token;
     } catch (error) {
-        console.error('❌ Błąd autoryzacji:', error.message);
+        console.error('❌ Błąd podczas generowania tokenu autoryzacji:', error.message);
         throw error;
     }
 }
 
-/**
- * 📸 Endpoint do edycji zdjęcia (Inpainting Semantyczny)
- */
+// 2. Endpoint do edycji zdjęć
 app.post('/edit-photo', async (req, res) => {
     try {
         const { imageBase64, prompt } = req.body;
 
+        // Walidacja danych wejściowych
         if (!imageBase64 || !prompt) {
-            return res.status(400).json({ error: 'Brak imageBase64 lub promptu w żądaniu' });
+            return res.status(400).json({ error: 'Brakujące dane: upewnij się, że wysyłasz "imageBase64" oraz "prompt".' });
         }
 
-        console.log('📸 Rozpoczynam przetwarzanie zdjęcia...');
+        console.log(`\n📸 Otrzymano żądanie edycji.`);
+        console.log(`📝 Prompt: "${prompt}"`);
 
-        // 1. CZYSZCZENIE BASE64 (Usuwamy nagłówek data:image/jpeg;base64, jeśli istnieje)
+        // Czyszczenie Base64 (usuwanie nagłówka np. 'data:image/jpeg;base64,')
         const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, "");
 
+        // Pobranie tokenu
         const accessToken = await getAccessToken();
-        const vertexUrl = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${MODEL}:predict`;
+        const endpointUrl = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${MODEL}:predict`;
 
-        // 2. STRUKTURA ŻĄDANIA DLA IMAGEN 3.0 CAPABILITY
+        // Struktura żądania dla Vertex AI (Imagen 3)
         const requestBody = {
             instances: [
                 {
                     prompt: prompt,
                     image: {
-                        bytesBase64Encoded: cleanBase64,
-                        mimeType: "image/jpeg"
+                        bytesBase64Encoded: cleanBase64
                     }
                 }
             ],
             parameters: {
                 sampleCount: 1,
-                editMode: "inpainting",
-                maskMode: "SEMANTIC", // Model sam znajdzie obiekt z promptu
-                outputMimeType: "image/jpeg"
+                editMode: "inpainting", 
+                maskMode: "SEMANTIC", // Imagen sam spróbuje dopasować obszar edycji do promptu
+                outputOptions: {
+                    mimeType: "image/jpeg",
+                    compressionQuality: 90
+                }
             }
         };
 
-        console.log(`🚀 Wysyłam żądanie do Vertex AI (${MODEL})...`);
+        console.log(`🚀 Wysyłanie zapytania do Vertex AI (${MODEL})...`);
 
-        const response = await fetch(vertexUrl, {
+        // Wysłanie zapytania do Google API
+        const response = await fetch(endpointUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -91,50 +91,20 @@ app.post('/edit-photo', async (req, res) => {
 
         const data = await response.json();
 
-        // 3. OBSŁUGA BŁĘDÓW API
+        // 3. Szczegółowa obsługa błędów API
         if (!response.ok) {
-            console.error('❌ Błąd z API Vertex AI:', JSON.stringify(data, null, 2));
+            console.error('\n🔴 BŁĄD API GOOGLE CLOUD:');
+            console.error(JSON.stringify(data, null, 2));
+            console.error('---------------------------\n');
+            
             return res.status(response.status).json({
-                error: 'Błąd API Google Cloud',
+                error: 'Błąd po stronie Google API',
                 details: data.error?.message || data
             });
         }
 
-        // 4. WYCIĄGANIE WYGENEROWANEGO OBRAZU
-        const prediction = data.predictions && data.predictions[0];
-        const editedImageBase64 = prediction?.bytesBase64Encoded;
+        // 4. Wyciąganie wygenerowanego obrazka
+        const editedImageBase64 = data.predictions?.[0]?.bytesBase64Encoded;
 
         if (!editedImageBase64) {
-            console.error('❌ Brak obrazu w odpowiedzi. Odpowiedź:', JSON.stringify(data, null, 2));
-            throw new Error('Model nie zwrócił żadnego obrazu. Sprawdź czy prompt jest zgodny z polityką treści.');
-        }
-
-        console.log('✅ Sukces! Obraz wygenerowany pomyślnie.');
-        
-        // Zwracamy czysty base64 (Frontend może sobie dodać nagłówek data:image/jpeg;base64,)
-        res.json({ 
-            image: editedImageBase64,
-            mimeType: "image/jpeg" 
-        });
-
-    } catch (error) {
-        console.error('❌ Błąd krytyczny serwera:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-/**
- * 🟢 Health check
- */
-app.get('/health', (req, res) => {
-    res.json({ status: 'OK', model: MODEL });
-});
-
-app.listen(PORT, () => {
-    console.log(`---`);
-    console.log(`✅ Serwer Fotobudki AI uruchomiony`);
-    console.log(`🚀 Port: ${PORT}`);
-    console.log(`📸 Model: ${MODEL}`);
-    console.log(`---`);
-});
-
+            console.error('\n🟡 Google nie zwróciło obraz
