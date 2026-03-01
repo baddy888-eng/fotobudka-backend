@@ -1,62 +1,70 @@
 const express = require('express');
 const { GoogleAuth } = require('google-auth-library');
 const cors = require('cors');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 const PROJECT_ID = 'fotobudka-ai';
 const LOCATION = 'us-central1';
-const MODEL = 'gemini-2.5-flash-image';
+const MODEL = 'imagegeneration@006';
 
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '20mb' }));
 
+// 🔐 Autoryzacja
 async function getAccessToken() {
     try {
         const credentialsJson = process.env.GOOGLE_CREDENTIALS;
         if (!credentialsJson) throw new Error('Brak GOOGLE_CREDENTIALS');
-        
+
         const credentials = JSON.parse(credentialsJson);
-        
+
         const auth = new GoogleAuth({
             credentials: credentials,
             scopes: ['https://www.googleapis.com/auth/cloud-platform']
         });
-        
+
         const client = await auth.getClient();
         const token = await client.getAccessToken();
+
         return token.token;
-        
+
     } catch (error) {
         console.error('❌ Błąd autoryzacji:', error);
         throw error;
     }
 }
 
+// 📸 Edycja zdjęcia
 app.post('/edit-photo', async (req, res) => {
     try {
         const { imageBase64, prompt } = req.body;
-        
+
+        if (!imageBase64 || !prompt) {
+            return res.status(400).json({ error: 'Brak imageBase64 lub prompt' });
+        }
+
         console.log('📸 Otrzymano zdjęcie');
-        
         const accessToken = await getAccessToken();
-        
-        const vertexUrl = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${MODEL}:generateContent`;
-        
-        console.log('🚀 Wysyłam do Vertex AI');
-        
+
+        const vertexUrl = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${MODEL}:predict`;
+
         const requestBody = {
-            contents: [{
-                role: "user",
-                parts: [
-                    { text: prompt },
-                    { inline_data: { mime_type: "image/jpeg", data: imageBase64 } }
-                ]
-            }],
-            generation_config: {
-                response_modalities: ["image", "text"]
+            instances: [
+                {
+                    prompt: prompt,
+                    image: {
+                        bytesBase64Encoded: imageBase64
+                    }
+                }
+            ],
+            parameters: {
+                sampleCount: 1
             }
         };
+
+        console.log('🚀 Wysyłam do Imagen');
 
         const response = await fetch(vertexUrl, {
             method: 'POST',
@@ -68,51 +76,26 @@ app.post('/edit-photo', async (req, res) => {
         });
 
         const data = await response.json();
-        console.log('📩 Otrzymano odpowiedź z Vertex AI');
 
-        // 🔍🔍🔍 DODATKOWE LOGOWANIE CAŁEJ ODPOWIEDZI 🔍🔍🔍
-        console.log('📋 Pełna odpowiedź (pierwsze 500 znaków):', JSON.stringify(data).substring(0, 500));
+        if (!response.ok) {
+            console.error('❌ Błąd API:', data);
+            throw new Error(data.error?.message || 'Błąd wywołania Imagen API');
+        }
+
+        console.log('📩 Odpowiedź z Vertex otrzymana');
 
         let editedImageBase64 = null;
 
-        if (data.candidates && data.candidates[0]?.content?.parts) {
-            console.log('📦 Znaleziono parts:', data.candidates[0].content.parts.length);
-            
-            for (const part of data.candidates[0].content.parts) {
-                console.log('🔍 Part keys:', Object.keys(part));
-                
-                if (part.inline_data?.data) {
-                    console.log('✅ Znaleziono OBRAZ!');
-                    console.log('📊 Długość danych obrazu:', part.inline_data.data.length);
-                    editedImageBase64 = part.inline_data.data;
-                    console.log('✅ Zapisałem obraz do zmiennej');
-                    break;
-                }
-                
-                if (part.text) {
-                    console.log('📝 Model zwrócił tekst:', part.text.substring(0, 100));
-                }
-            }
-        } else {
-            console.log('❌ Brak candidates lub parts w odpowiedzi');
-        }
-
-        // Sprawdź czy zmienna editedImageBase64 ma dane
-        if (editedImageBase64) {
-            console.log('✅ editedImageBase64 ma dane, długość:', editedImageBase64.length);
-        } else {
-            console.log('❌ editedImageBase64 jest pusta');
+        if (data.predictions && data.predictions.length > 0) {
+            editedImageBase64 = data.predictions[0].bytesBase64Encoded;
         }
 
         if (!editedImageBase64) {
-            console.error('❌ Nie znaleziono obrazu w odpowiedzi');
-            if (data.error) {
-                throw new Error(`Błąd Vertex AI: ${data.error.message}`);
-            }
-            throw new Error('Nie otrzymano obrazu z API');
+            throw new Error('Nie otrzymano obrazu z Imagen');
         }
-        
+
         console.log('✅ Odsyłam obraz do frontendu');
+
         res.json({ image: editedImageBase64 });
 
     } catch (error) {
@@ -121,6 +104,7 @@ app.post('/edit-photo', async (req, res) => {
     }
 });
 
+// 🟢 Health check
 app.get('/health', (req, res) => {
     res.json({ status: 'OK' });
 });
@@ -128,5 +112,3 @@ app.get('/health', (req, res) => {
 app.listen(PORT, () => {
     console.log(`✅ Serwer fotobudki działa na porcie ${PORT}`);
 });
-
-
