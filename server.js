@@ -6,7 +6,9 @@ const PORT = process.env.PORT || 3000;
 
 // Klucz API z Twojego konta Google
 const API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
+
+// !!! ZMIENIONY MODEL - ten obsługuje generowanie obrazów !!!
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key=${API_KEY}`;
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -15,15 +17,21 @@ app.post('/edit-photo', async (req, res) => {
     try {
         const { imageBase64, prompt } = req.body;
         
+        // Poprawiona struktura zapytania
         const requestBody = {
             contents: [{
                 parts: [
                     { text: prompt },
                     { inline_data: { mime_type: "image/jpeg", data: imageBase64 } }
                 ]
-            }]
+            }],
+            generation_config: {
+                response_modalities: ["image", "text"]
+            }
         };
 
+        console.log("Wysyłam zapytanie do Gemini...");
+        
         const response = await fetch(GEMINI_API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -31,19 +39,24 @@ app.post('/edit-photo', async (req, res) => {
         });
 
         const data = await response.json();
+        console.log("Otrzymano odpowiedź z Gemini");
         
-        // Wyciągnij obraz z odpowiedzi
+        // Wyciągnij obraz z odpowiedzi - ulepszone logowanie
         let editedImageBase64 = null;
+        
         if (data.candidates && data.candidates[0]?.content?.parts) {
             for (const part of data.candidates[0].content.parts) {
+                console.log("Znaleziono część:", Object.keys(part));
                 if (part.inline_data?.data) {
                     editedImageBase64 = part.inline_data.data;
+                    console.log("Znaleziono obraz w odpowiedzi!");
                     break;
                 }
             }
         }
 
         if (!editedImageBase64) {
+            console.error("Brak obrazu w odpowiedzi. Pełna odpowiedź:", JSON.stringify(data, null, 2));
             throw new Error('Nie otrzymano obrazu z API');
         }
         
