@@ -7,12 +7,13 @@ const PORT = process.env.PORT || 3000;
 
 const PROJECT_ID = 'fotobudka-ai';
 const LOCATION = 'us-central1';
-const MODEL = 'imagen-4.0-fast-generate-001';
+// ✅ TYLKO TEN MODEL OBSŁUGUJE EDYCJĘ ZDJĘĆ
+const MODEL = 'imagen-3.0-capability-001';
 
 app.use(cors());
 app.use(express.json({ limit: '20mb' }));
 
-// 🔐 Autoryzacja (bez zmian - działa dobrze!)
+// 🔐 Autoryzacja (bez zmian)
 async function getAccessToken() {
     try {
         const credentialsJson = process.env.GOOGLE_CREDENTIALS;
@@ -50,7 +51,7 @@ app.post('/edit-photo', async (req, res) => {
 
         const vertexUrl = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${MODEL}:predict`;
 
-        // ✅ POPRAWIONA STRUKTURA - zgodna z dokumentacją Google
+        // ✅ Poprawna struktura dla Imagen 3.0 capability (edycja)
         const requestBody = {
             instances: [
                 {
@@ -69,15 +70,12 @@ app.post('/edit-photo', async (req, res) => {
             ],
             parameters: {
                 sampleCount: 1,
-                // ⚡ ZMIANA: używamy edit_mode bezpośrednio, nie editConfig!
-                editMode: "inpainting-insert",  // Lub "inpainting-remove" lub "outpainting"
-                // Opcjonalnie możesz dodać maskMode do automatycznego maskowania
-                maskMode: "SEMANTIC"  // Model sam wykryje co edytować na podstawie promptu
+                editMode: "inpainting",  // Poprawna nazwa trybu edycji
+                maskMode: "SEMANTIC"     // Automatyczne maskowanie na podstawie promptu
             }
         };
 
         console.log('🚀 Wysyłam do Imagen (edycja)');
-        console.log('📤 Struktura zapytania:', JSON.stringify(requestBody, null, 2).substring(0, 500));
 
         const response = await fetch(vertexUrl, {
             method: 'POST',
@@ -96,23 +94,18 @@ app.post('/edit-photo', async (req, res) => {
         }
 
         console.log('📩 Odpowiedź z Vertex otrzymana');
-        console.log('📋 Struktura odpowiedzi:', JSON.stringify(data, null, 2).substring(0, 500));
 
         let editedImageBase64 = null;
 
         if (data.predictions && data.predictions.length > 0) {
             const pred = data.predictions[0];
             
-            // Sprawdzamy różne możliwe formaty odpowiedzi
             if (pred.bytesBase64Encoded) {
                 editedImageBase64 = pred.bytesBase64Encoded;
                 console.log('✅ Znaleziono obraz w bytesBase64Encoded');
             } else if (pred.image?.bytesBase64Encoded) {
                 editedImageBase64 = pred.image.bytesBase64Encoded;
                 console.log('✅ Znaleziono obraz w image.bytesBase64Encoded');
-            } else if (Array.isArray(pred.images) && pred.images[0]?.bytesBase64Encoded) {
-                editedImageBase64 = pred.images[0].bytesBase64Encoded;
-                console.log('✅ Znaleziono obraz w images[0].bytesBase64Encoded');
             }
         }
 
@@ -139,5 +132,3 @@ app.listen(PORT, () => {
     console.log(`✅ Serwer fotobudki działa na porcie ${PORT}`);
     console.log(`📸 Model: ${MODEL} (Imagen 3.0 capability - edycja)`);
 });
-
-
