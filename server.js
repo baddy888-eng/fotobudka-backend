@@ -6,7 +6,7 @@ const PORT = process.env.PORT || 3000;
 
 const PROJECT_ID = 'fotobudka-ai';
 const LOCATION = 'us-central1';
-const MODEL = 'gemini-1.5-flash';
+const MODEL = 'gemini-2.5-flash-image';
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -128,4 +128,5 @@ app.get('/health', (req, res) => {
 app.listen(PORT, () => {
     console.log(`✅ Serwer fotobudki działa na porcie ${PORT}`);
 });
+
 
