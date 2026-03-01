@@ -107,4 +107,36 @@ app.post('/edit-photo', async (req, res) => {
         const editedImageBase64 = data.predictions?.[0]?.bytesBase64Encoded;
 
         if (!editedImageBase64) {
-            console.error('\n🟡 Google nie zwróciło obraz
+            console.error('\n🟡 Google nie zwróciło obrazka. Pełna odpowiedź:', JSON.stringify(data, null, 2));
+            return res.status(500).json({ error: 'API zwróciło odpowiedź, ale bez obrazka. Może to być blokada filtrów bezpieczeństwa.' });
+        }
+
+        console.log(`✅ Edycja zakończona sukcesem. Zwracam obrazek do frontendu.`);
+        
+        // Zwracamy jako czysty base64 (z dodanym MIME typem dla wygody)
+        res.json({
+            success: true,
+            mimeType: "image/jpeg",
+            image: editedImageBase64
+        });
+
+    } catch (error) {
+        console.error('\n❌ Wystąpił krytyczny błąd serwera:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 5. Prosty Healthcheck
+app.get('/health', (req, res) => {
+    res.json({ status: 'OK', model: MODEL, location: LOCATION });
+});
+
+// Start serwera
+app.listen(PORT, () => {
+    console.log(`\n======================================`);
+    console.log(`🟢 Serwer Fotobudki AI działa!`);
+    console.log(`🚀 Port: ${PORT}`);
+    console.log(`🤖 Model: ${MODEL}`);
+    console.log(`🌍 Region: ${LOCATION}`);
+    console.log(`======================================\n`);
+});
