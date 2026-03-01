@@ -9,7 +9,7 @@ const PORT = process.env.PORT || 3000;
 const PROJECT_ID = 'fotobudka-ai';
 const LOCATION = 'us-central1';
 // ✅ Model wspierający edycję (inpainting/outpainting)
-const MODEL = 'imagen-3.0-capability-001';
+const MODEL = 'imagen-3';
 
 app.use(cors());
 // Zwiększony limit, aby obsłużyć duże zdjęcia w Base64
@@ -137,3 +137,4 @@ app.listen(PORT, () => {
     console.log(`📸 Model: ${MODEL}`);
     console.log(`---`);
 });
+
