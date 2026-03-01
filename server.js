@@ -66,9 +66,10 @@ app.post('/edit-photo', async (req, res) => {
         
         console.log('🚀 Wysyłam zapytanie do Vertex AI...');
         
-        // 3. Przygotuj zapytanie
+        // ⚡⚡⚡ POPRAWKA: DODANO POLE "role": "user" ⚡⚡⚡
         const requestBody = {
             contents: [{
+                role: "user",  // ← TO JEST JEDYNA ZMIANA W TWOIM KODZIE!
                 parts: [
                     { text: prompt },
                     { 
@@ -142,4 +143,3 @@ app.listen(PORT, () => {
     console.log(`🌍 Lokalizacja: ${LOCATION}`);
     console.log(`🔑 Autoryzacja: przez zmienną środowiskową GOOGLE_CREDENTIALS`);
 });
-
