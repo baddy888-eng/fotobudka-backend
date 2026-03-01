@@ -12,10 +12,9 @@ const MODEL = 'gemini-2.5-flash-image';
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-// Funkcja do uzyskiwania tokena dostępu – TERAZ UŻYWA ZMIENNEJ ŚRODOWISKOWEJ!
+// Funkcja do uzyskiwania tokena dostępu
 async function getAccessToken() {
     try {
-        // Pobierz dane uwierzytelniające ze zmiennej środowiskowej
         const credentialsJson = process.env.GOOGLE_CREDENTIALS;
         
         if (!credentialsJson) {
@@ -24,7 +23,6 @@ async function getAccessToken() {
         
         console.log("✅ Znaleziono zmienną GOOGLE_CREDENTIALS");
         
-        // Parsuj JSON
         let credentials;
         try {
             credentials = JSON.parse(credentialsJson);
@@ -35,7 +33,6 @@ async function getAccessToken() {
             throw new Error('Nieprawidłowy format JSON w GOOGLE_CREDENTIALS');
         }
         
-        // Autoryzacja przez credentials (NIE przez plik!)
         const auth = new GoogleAuth({
             credentials: credentials,
             scopes: ['https://www.googleapis.com/auth/cloud-platform']
@@ -58,18 +55,15 @@ app.post('/edit-photo', async (req, res) => {
         
         console.log('📸 Otrzymano zdjęcie. Uzyskuję token...');
         
-        // 1. Uzyskaj token dostępu
         const accessToken = await getAccessToken();
         
-        // 2. Przygotuj URL dla Vertex AI
         const vertexUrl = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${MODEL}:generateContent`;
         
         console.log('🚀 Wysyłam zapytanie do Vertex AI...');
         
-        // ⚡⚡⚡ POPRAWKA: DODANO POLE "role": "user" ⚡⚡⚡
         const requestBody = {
             contents: [{
-                role: "user",  // ← TO JEST JEDYNA ZMIANA W TWOIM KODZIE!
+                role: "user",
                 parts: [
                     { text: prompt },
                     { 
@@ -85,7 +79,6 @@ app.post('/edit-photo', async (req, res) => {
             }
         };
 
-        // 4. Wyślij zapytanie z tokenem
         const response = await fetch(vertexUrl, {
             method: 'POST',
             headers: {
@@ -97,26 +90,48 @@ app.post('/edit-photo', async (req, res) => {
 
         const data = await response.json();
         console.log('📩 Otrzymano odpowiedź z Vertex AI');
-
-        // 5. Wyciągnij obraz z odpowiedzi
-        let editedImageBase64 = null;
         
+        // 🔍🔍🔍 SZCZEGÓŁOWE LOGOWANIE ODPOWIEDZI 🔍🔍🔍
+        console.log('📋 Pełna odpowiedź:', JSON.stringify(data, null, 2));
+
+        let editedImageBase64 = null;
+
+        // Sprawdź czy w ogóle są candidates
+        if (!data.candidates) {
+            console.log('❌ Brak candidates w odpowiedzi');
+            if (data.error) {
+                throw new Error(`Błąd Vertex AI: ${data.error.message || JSON.stringify(data.error)}`);
+            }
+        }
+
         if (data.candidates && data.candidates[0]?.content?.parts) {
+            console.log('📦 Znaleziono parts:', data.candidates[0].content.parts.length);
+            
             for (const part of data.candidates[0].content.parts) {
+                console.log('🔍 Part keys:', Object.keys(part));
+                
                 if (part.inline_data?.data) {
                     editedImageBase64 = part.inline_data.data;
                     console.log('✅ Znaleziono obraz w odpowiedzi!');
                     break;
                 }
+                
+                if (part.text) {
+                    console.log('📝 Model zwrócił tekst:', part.text.substring(0, 200));
+                }
             }
         }
 
         if (!editedImageBase64) {
-            console.error('❌ Brak obrazu. Odpowiedź:', JSON.stringify(data, null, 2));
+            console.error('❌ Brak obrazu w odpowiedzi');
             
-            // Sprawdź czy to błąd autoryzacji
-            if (data.error) {
-                throw new Error(`Błąd Vertex AI: ${data.error.message || JSON.stringify(data.error)}`);
+            // Sprawdź blokadę bezpieczeństwa
+            if (data.candidates && data.candidates[0]?.safety_ratings) {
+                console.log('🛡️ Safety ratings:', JSON.stringify(data.candidates[0].safety_ratings, null, 2));
+            }
+            
+            if (data.prompt_feedback) {
+                console.log('⚠️ Prompt feedback:', JSON.stringify(data.prompt_feedback, null, 2));
             }
             
             throw new Error('Nie otrzymano obrazu z API');
